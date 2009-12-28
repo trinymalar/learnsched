@@ -1,8 +1,5 @@
 package org.apache.hadoop.mapred;
 
-import java.sql.SQLException;
-import java.sql.Statement;
-
 public class Decision {
   private NodeEnvironment env;
   private int jobClusterID;
