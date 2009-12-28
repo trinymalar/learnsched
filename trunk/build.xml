@@ -1,0 +1,68 @@
+<project name="learning-scheduler" basedir="." default="main">
+    
+    <property name="main-class" value="LearningScheduler"/>
+    
+    <!-- Change following fields according to your settings -->
+    <!-- Path of the directory of the scheduler source code 
+    Example: <property name="project.base" value="/home/foo/bar/learnsched"/>   
+    -->    
+    <property name="project.base" value="."/>
+    
+    
+    <!-- Location of Hadoop directory 
+    Example: <property name="hadoop.home.dir" value="/home/foo/bar/hadoop-0.20.0"/> 
+    -->
+    <property name="hadoop.home.dir" value="../hadoop-0.20.0"/>
+    
+        
+    <property name="src.dir" value="${project.base}/src"/>
+    <property name="build.dir" value="${project.base}/build"/>
+    <property name="classes.dir" value="${build.dir}/classes"/>
+    <property name="jar.dir" value="${build.dir}/jar"/>
+    <property name="lib.dir" value="${project.base}/lib"/>
+   
+    <property name="hadoop.lib.dir" value="${hadoop.home.dir}/lib"/>
+    <property name="hadoop.build.classes.dir" value="${hadoop.home.dir}/build/classes"/>
+
+    <path id="classpath">
+      <fileset dir="${lib.dir}" includes="**/*.jar"/>
+      <fileset dir="${hadoop.lib.dir}" includes="**/*.jar"/>
+      <fileset dir="${hadoop.build.classes.dir}" includes="**/*.class"/>
+    </path>
+
+    <target name="clean">
+    	<delete dir="${classes.dir}"/>
+    	<delete dir="${jar.dir}"/>
+    </target>
+
+    <target name="compile">
+         <mkdir dir="${classes.dir}"/>
+         <javac srcdir="${src.dir}" destdir="${classes.dir}" classpathref="classpath" debug="on" debuglevel="lines,vars,source"/>
+    </target>
+
+    <target name="jar" depends="compile">
+    	<copy todir="${classes.dir}">
+    		<fileset dir="${src.dir}"/>
+    	</copy>
+        <mkdir dir="${jar.dir}"/>
+        <jar destfile="${jar.dir}/${ant.project.name}.jar" basedir="${classes.dir}">
+            <manifest>
+                <attribute name="Main-Class" value="${main-class}"/>
+            </manifest>
+        </jar>
+        <copy file="${jar.dir}/${ant.project.name}.jar" todir="${hadoop.lib.dir}"/>
+    </target>
+
+    <target name="run" depends="jar">
+      <java fork="true" classname="${main-class}">
+        <classpath>
+	   <path refid="classpath"/>
+	   <path location="${jar.dir}/${ant.project.name}.jar"/>
+	</classpath>
+      </java>
+    </target>
+
+    <target name="clean-build" depends="clean, jar"/>
+    <target name="main" depends="clean, jar"/>
+</project>
+
