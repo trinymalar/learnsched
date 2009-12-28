@@ -1,0 +1,5 @@
+inputgen::bin/hadoop jar hadoop-0.20.0-examples.jar randomtextwriter input
+jwordcount::bin/hadoop jar hadoop-0.20.0-examples.jar wordcount input output_wc
+urlget::bin/hadoop jar contrib/streaming/hadoop-0.20.0-streaming.jar -D mapred.job.name="PyURLGet" -D mapred.reduce.tasks=0 -input input -output urlgetout -mapper urlget.py -file urlget.py
+url2disk::bin/hadoop jar contrib/streaming/hadoop-0.20.0-streaming.jar -D mapred.job.name="PyURL2disk" -D mapred.reduce.tasks=0 -input input -output url2diskout -mapper urltodisk.py -file urltodisk.py
+cpuheavy::bin/hadoop jar contrib/streaming/hadoop-0.20.0-streaming.jar -D mapred.job.name="PyCPUActivity" -D mapred.reduce.tasks=0 -input input -output randactout -mapper cpuheavy.py -file cpuheavy.py
