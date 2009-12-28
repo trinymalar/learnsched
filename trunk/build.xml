@@ -10,7 +10,7 @@
     
     
     <!-- Location of Hadoop directory 
-    Example: <property name="hadoop.home.dir" value="/home/foo/bar/hadoop-0.20.0"/> 
+    Examples: <property name="hadoop.home.dir" value="/home/foo/bar/hadoop-0.20.0"/>
     -->
     <property name="hadoop.home.dir" value="../hadoop-0.20.0"/>
     
