@@ -1,0 +1,1 @@
+cpuheavy::bin/hadoop jar contrib/streaming/hadoop-0.20.0-streaming.jar -D mapred.job.name="PyCPUActivity" -D learnsched.jobstat.map="5:5:5:5" -D mapred.reduce.tasks=0 -input input -output randactout -mapper cpuheavy.py -file cpuheavy.py
