@@ -37,7 +37,7 @@ class NodeEnvironment {
   }
   
   public boolean underLoaded(double procsPerCpu) {
-    return !overLoaded(procsPerCpu);
+    return !overLoaded(procsPerCpu, true);
   }
 
   public String toString() {
@@ -59,8 +59,8 @@ class NodeEnvironment {
   }
   
 
-  public boolean overLoaded(double procsPerCpu) {
-    if (LearningScheduler.MULTIPLE_RESOURCE_OVERLOAD) {
+  public boolean overLoaded(double procsPerCpu, boolean multipleResources) {
+    if (multipleResources) {
       return multipleResourcesOverloaded(procsPerCpu);  
     } else {
       return Math.ceil(loadAverage * loadScaleFactor) > 
