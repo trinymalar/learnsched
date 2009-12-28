@@ -9,11 +9,7 @@ public class JobStatistics {
   public JobStatistics(String statStr) {
     LearningScheduler.LOG.info("New job stat string:" + statStr);
     String toks[] = statStr.split(":");
-    
-    /*for(String tok : toks) {
-      System.out.print("["+tok+"]");
-    }*/
-    
+  
     cpu = Double.parseDouble(toks[0]);
     disk = Double.parseDouble(toks[1]);
     net = Double.parseDouble(toks[2]);

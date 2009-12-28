@@ -12,7 +12,7 @@
     <!-- Location of Hadoop directory 
     Examples: <property name="hadoop.home.dir" value="/home/foo/bar/hadoop-0.20.0"/>
     -->
-    <property name="hadoop.home.dir" value="../hadoop-0.20.0"/>
+    <property name="hadoop.home.dir" value="path to hadoop home dir"/>
     
         
     <property name="src.dir" value="${project.base}/src"/>
@@ -24,10 +24,12 @@
     <property name="hadoop.lib.dir" value="${hadoop.home.dir}/lib"/>
     <property name="hadoop.build.classes.dir" value="${hadoop.home.dir}/build/classes"/>
 
-    <path id="classpath">
-      <fileset dir="${lib.dir}" includes="**/*.jar"/>
+    <path id="classpath.hadoop.jars">
+      <fileset dir="${hadoop.home.dir}" includes="**/*.jar"/>
+    </path>
+
+    <path id="classpath.hadoop.lib.jars">
       <fileset dir="${hadoop.lib.dir}" includes="**/*.jar"/>
-      <fileset dir="${hadoop.build.classes.dir}" includes="**/*.class"/>
     </path>
 
     <target name="clean">
@@ -37,7 +39,10 @@
 
     <target name="compile">
          <mkdir dir="${classes.dir}"/>
-         <javac srcdir="${src.dir}" destdir="${classes.dir}" classpathref="classpath" debug="on" debuglevel="lines,vars,source"/>
+         <javac srcdir="${src.dir}" destdir="${classes.dir}"  debug="on" debuglevel="lines,vars,source">
+             <classpath refid = "classpath.hadoop.jars"/>
+             <classpath refid = "classpath.hadoop.lib.jars"/>
+         </javac>
     </target>
 
     <target name="jar" depends="compile">
