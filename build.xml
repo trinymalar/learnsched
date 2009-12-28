@@ -1,20 +1,7 @@
 <project name="learning-scheduler" basedir="." default="main">
-    
+    <property file="build.properties" />
     <property name="main-class" value="LearningScheduler"/>
-    
-    <!-- Change following fields according to your settings -->
-    <!-- Path of the directory of the scheduler source code 
-    Example: <property name="project.base" value="/home/foo/bar/learnsched"/>   
-    -->    
     <property name="project.base" value="."/>
-    
-    
-    <!-- Location of Hadoop directory 
-    Examples: <property name="hadoop.home.dir" value="/home/foo/bar/hadoop-0.20.0"/>
-    -->
-    <property name="hadoop.home.dir" value="path to hadoop home dir"/>
-    
-        
     <property name="src.dir" value="${project.base}/src"/>
     <property name="build.dir" value="${project.base}/build"/>
     <property name="classes.dir" value="${build.dir}/classes"/>
