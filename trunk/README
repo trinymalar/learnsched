@@ -3,12 +3,8 @@ configuring Hadoop. Please refer the Hadoop documentation for related details.
 
 Building Learning Scheduler:
 1. Copy the Hadoop jar files, and jar files in Hadoop's lib directory to learnsched/lib/
-2. Edit build.xml
-    Change following fields according to your settings
-    1. Path of the directory of the scheduler source code 
-    Example: <property name="project.base" value="/home/foo/bar/learnsched"/>   
-    2. Location of Hadoop directory 
-    Example: <property name="hadoop.home.dir" value="/home/foo/bar/hadoop-0.20.0"/> 
+2. Create build.properties and add the following property
+    hadoop.home.dir=/path/to/hadoop/toplevel/directory
 3. Build the project, the scheduler jar file will be automatically copied to Hadoop's lib directory.
    If that fails, copy the scheduler jar file from build/jar to Hadoop's lib directory manually.
    
