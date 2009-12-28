@@ -30,26 +30,28 @@ public class LearningScheduler extends TaskScheduler {
   private JobListener jobListener;
   // PrintWriter for logging decisions
   private PrintWriter decisionWriter;
-  // TODO: read from configuration  
-  //CONFIG
-  //whether to distinguish between jobs
-  private final boolean UNIQUE_JOBS = true;
-  //whether to distinguish between map and reduce task of a job
-  private final boolean MAP_NEQ_REDUCE = true;
-  // whether to consider multiple resources while determining overload
-  public static final boolean MULTIPLE_RESOURCE_OVERLOAD = false;
+
+  // constants
+  private static final JobStatistics NULL_JOB_STAT = new JobStatistics("0:0:0:0");
   public static final String DEFAULT_JOB_NAME = "JOB";
   public static final String MAP_SFX = "_M";
-  public static final String REDUCE_SFX = "_R";
-  public static String HISTORY_FILE_NAME = "decisions/decisions_%s.txt";
+  public static final String REDUCE_SFX = "_R";  
   public static final Log LOG = LogFactory.getLog(LearningScheduler.class);
-  private static final JobStatistics NULL_JOB_STAT = new JobStatistics("0:0:0:0");
-  public static final double MIN_EXPECTED_UTILITY = 0.0;
-  public static final double UNDERLOAD_THRESHOLD = 0.8;
-  public static final double OVERLOAD_THRESHOLD = 1.0;
-  public static final double PROCS_PER_CPU = 1.0;
-  public static final int FALSE_NEGATIVE_LIMIT = 3;
-  private static final double FAILURE_PENALTY = 2;
+
+  //Following variables are configurable
+  private static String HISTORY_FILE_NAME = new String();
+  // whether to consider multiple resources while determining overload
+  private boolean MULTIPLE_RESOURCE_OVERLOAD;
+  private double MIN_EXPECTED_UTILITY = 0.0;
+  private double UNDERLOAD_THRESHOLD = 0.8;
+  private double OVERLOAD_THRESHOLD = 1.0;
+  private double PROCS_PER_CPU = 1.0;
+  private int FALSE_NEGATIVE_LIMIT = 3;
+  private double FAILURE_PENALTY = 2;
+  //whether to distinguish between jobs
+  private boolean UNIQUE_JOBS = true;
+  //whether to distinguish between map and reduce task of a job
+  private boolean MAP_NEQ_REDUCE = true;
 
   public LearningScheduler() {
     this.joblist = new ArrayList<JobInProgress>();
@@ -57,10 +59,33 @@ public class LearningScheduler extends TaskScheduler {
     classifier = new PerceptronClassifier();
     lastDecision = new HashMap<String, Decision>();
     falseNegatives = new HashMap<String, Integer>();
-    jobNameToStatistics = new HashMap<String, JobStatistics>();
-    utilFunc = (UtilityFunction) new ConstantUtility();
+    jobNameToStatistics = new HashMap<String, JobStatistics>();   
     this.jobListener = new JobListener();
     LOG.info("Scheduler Initiated");
+  }
+
+  // scheduler configuration
+  private void config() {
+    utilFunc = (UtilityFunction) new ConstantUtility();
+    MIN_EXPECTED_UTILITY =
+            (double) conf.getFloat("mapred.learnsched.MinExpectedUtility", 0f);
+    UNDERLOAD_THRESHOLD =
+           (double) conf.getFloat("mapred.learnsched.UnderloadThreshold", 0.8f);
+    OVERLOAD_THRESHOLD =
+           (double) conf.getFloat("mapred.learnsched.OverloadThreshold", 1.0f);
+    PROCS_PER_CPU =
+            (double) conf.getFloat("mapred.learnsched.ProcessesPerCpu", 1);
+    FALSE_NEGATIVE_LIMIT =
+            conf.getInt("mapred.learnsched.FalseNegativeLimit", 3);
+    FAILURE_PENALTY = conf.getInt("mapred.learnsched.FailurePenalty", 2);
+    HISTORY_FILE_NAME =
+            conf.get("mapred.learnsched.HistoryFile", "decisions_%s.txt");
+    MULTIPLE_RESOURCE_OVERLOAD =
+            conf.getBoolean("mapred.learnsched.MultipleResources", false);
+    UNIQUE_JOBS =
+            conf.getBoolean("mapred.learnsched.UniqueJobs", true);
+    MAP_NEQ_REDUCE =
+            conf.getBoolean("mapred.learnsched.MapDifferentFromReduce", true);
   }
 
   @Override
@@ -70,6 +95,10 @@ public class LearningScheduler extends TaskScheduler {
     eagerInitListener.start();
     taskTrackerManager.addJobInProgressListener(eagerInitListener);
     taskTrackerManager.addJobInProgressListener(jobListener);
+
+    // configure the scheduler
+    config();
+
     String dateStr = new Date().toString().replace(' ', '_').replace(':', '_');
     HISTORY_FILE_NAME = String.format(HISTORY_FILE_NAME, dateStr);
 
@@ -180,7 +209,7 @@ public class LearningScheduler extends TaskScheduler {
       return;
     }
 
-    if (env.overLoaded(PROCS_PER_CPU)) {
+    if (env.overLoaded(PROCS_PER_CPU, MULTIPLE_RESOURCE_OVERLOAD)) {
       if (dd.wasTaskAssigned()) {
         notifyResult(dd, false);
       }
@@ -257,7 +286,7 @@ public class LearningScheduler extends TaskScheduler {
             trackerName + "\t" +
             env.toString());
     // don't allocate tasks if node is heavily loaded
-    if (env.overLoaded(PROCS_PER_CPU * OVERLOAD_THRESHOLD)) {
+    if (env.overLoaded(PROCS_PER_CPU * OVERLOAD_THRESHOLD, MULTIPLE_RESOURCE_OVERLOAD)) {
       LOG.info(trackerName + " >>> NOT ALLOCATING BECAUSE OVERLOAD");
       return null;
     }
