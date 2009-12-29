@@ -1,5 +1,7 @@
 package org.apache.hadoop.mapred;
 
+import java.util.concurrent.atomic.AtomicInteger;
+
 public class NaiveBayesClassifier implements Classifier {
 
   private static final String featureNames[] = {"job.cpu", "job.disk", "job.net", "job.memory",
@@ -13,7 +15,7 @@ public class NaiveBayesClassifier implements Classifier {
   public static final double SUCCESS_THRESHOLD = 0.9;
   private ClassifierFeature features[];
   private Histogram classProbability;
-  private int numSamples;
+  private AtomicInteger numSamples = new AtomicInteger(0);
 
   public NaiveBayesClassifier() {
     features = new ClassifierFeature[featureNames.length];
@@ -37,10 +39,10 @@ public class NaiveBayesClassifier implements Classifier {
 
   public void train(int classNum, int[] trainVals) {
     // do not train this result if we already have lots of samples recorded.
-    if (numSamples > MAX_SAMPLES) {
+    if (numSamples.get() > MAX_SAMPLES) {
       return;
     }
-    this.numSamples++;
+    this.numSamples.incrementAndGet();
     // update class probability
     classProbability.addValue(classNum);
     // update probabilities of individual features
@@ -70,7 +72,7 @@ public class NaiveBayesClassifier implements Classifier {
   }
 
   public double getSuccessDistance(JobStatistics jobstat, NodeEnvironment env) {
-    if (numSamples <= MIN_SAMPLES) {
+    if (numSamples.get() <= MIN_SAMPLES) {
       return 1.0;
     }
     // first construct features from the node environment
