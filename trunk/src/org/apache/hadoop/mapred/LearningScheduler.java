@@ -11,6 +11,7 @@ import java.util.List;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
+import org.apache.hadoop.util.ReflectionUtils;
 
 public class LearningScheduler extends TaskScheduler {
 
@@ -55,8 +56,6 @@ public class LearningScheduler extends TaskScheduler {
 
   public LearningScheduler() {
     this.joblist = new ArrayList<JobInProgress>();
-    //classifier = new NaiveBayesClassifier();
-    classifier = new PerceptronClassifier();
     lastDecision = new HashMap<String, Decision>();
     falseNegatives = new HashMap<String, Integer>();
     jobNameToStatistics = new HashMap<String, JobStatistics>();   
@@ -65,8 +64,24 @@ public class LearningScheduler extends TaskScheduler {
   }
 
   // scheduler configuration
-  private void config() {
-    utilFunc = (UtilityFunction) new ConstantUtility();
+  private void config() {    
+    classifier = (Classifier) ReflectionUtils.newInstance(
+            conf.getClass("mapred.learnsched.Classifier",
+              NaiveBayesClassifier.class, Classifier.class), conf);
+    
+    if (classifier == null) {
+      LOG.error("Error in creating classifier instance, failing back to Naive Bayes Classifier");
+      classifier = new NaiveBayesClassifier();
+    }
+    
+    utilFunc = (UtilityFunction) ReflectionUtils.newInstance(
+            conf.getClass("mapred.learnsched.UtilityFunction",
+              FifoUtility.class, UtilityFunction.class), conf);
+    if (utilFunc == null) {
+      LOG.error("Error in creating utility function instance, failing back to FIFO utility");
+      utilFunc = new FifoUtility();
+    }
+
     MIN_EXPECTED_UTILITY =
             (double) conf.getFloat("mapred.learnsched.MinExpectedUtility", 0f);
     UNDERLOAD_THRESHOLD =
@@ -333,6 +348,7 @@ public class LearningScheduler extends TaskScheduler {
       }
     }
 
+    // we do not have any jobs in the queue
     if (selectedJob == null) {
       LOG.info("No jobs");
       return null;
