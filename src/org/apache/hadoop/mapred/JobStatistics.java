@@ -8,7 +8,7 @@ public class JobStatistics {
   double memory;
 
   public JobStatistics(String statStr) {
-    LearningScheduler.LOG.info("New job stat string:" + statStr);
+    //LearningScheduler.LOG.info("New job stat string:" + statStr);
     String toks[] = statStr.split(":");
 
     cpu = Double.parseDouble(toks[0]);

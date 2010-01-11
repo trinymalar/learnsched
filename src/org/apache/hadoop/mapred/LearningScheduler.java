@@ -34,6 +34,7 @@ public class LearningScheduler extends TaskScheduler {
 
   // constants
   private static final JobStatistics NULL_JOB_STAT = new JobStatistics("0:0:0:0");
+  private static final String NULL_JOB_STAT_STR = "0:0:0:0";
   public static final String DEFAULT_JOB_NAME = "JOB";
   public static final String MAP_SFX = "_M";
   public static final String REDUCE_SFX = "_R";  
@@ -148,7 +149,8 @@ public class LearningScheduler extends TaskScheduler {
 
   private JobStatistics getJobStatistics(JobInProgress job, boolean isMap) {
     String jobname = getJobName(job) + (isMap ? MAP_SFX : REDUCE_SFX);
-    return jobNameToStatistics.get(jobname);
+    JobStatistics jobstat = jobNameToStatistics.get(jobname);
+    return jobstat == null ? NULL_JOB_STAT : jobstat;
   }
 
   public int getJobClusterID(JobInProgress job, boolean isMap) {
@@ -252,7 +254,8 @@ public class LearningScheduler extends TaskScheduler {
     if (dd != null) {
       dd.setResult(result);
       if (classifier != null) {
-        classifier.updateClassifier(dd.getJobStatistics(), dd.getNodeEnv(), result);
+        JobStatistics jobstat = dd.getJobStatistics();
+        classifier.updateClassifier(jobstat, dd.getNodeEnv(), result);
       } else {
         LOG.warn("Unable to get classifier for job:" + dd.getSelectedJob());
       }
@@ -430,20 +433,22 @@ public class LearningScheduler extends TaskScheduler {
     @Override
     public void jobAdded(JobInProgress job) {
       joblist.add(job);
-      String statStrMap = job.getJobConf().get("learnsched.jobstat.map");
+      String statStrMap = job.getJobConf().get("learnsched.jobstat.map", NULL_JOB_STAT_STR );
+      String jobname = getJobName(job);
       if (statStrMap != null) {
         JobStatistics jobstat = new JobStatistics(statStrMap);
-        String jobname = getJobName(job) + MAP_SFX;
-        if (!jobNameToStatistics.containsKey(jobname)) {
-          jobNameToStatistics.put(jobname, jobstat);
+        String jobNameMap = jobname + MAP_SFX;
+        if (!jobNameToStatistics.containsKey(jobNameMap)) {
+          jobNameToStatistics.put(jobNameMap, jobstat);
         }
-      }
-      String statStrReduce = job.getJobConf().get("learnsched.jobstat.reduce");
+      } 
+      
+      String statStrReduce = job.getJobConf().get("learnsched.jobstat.reduce", NULL_JOB_STAT_STR);
       if (statStrReduce != null && job.desiredReduces() > 0) {
         JobStatistics jobstat = new JobStatistics(statStrReduce);
-        String jobname = getJobName(job) + REDUCE_SFX;
-        if (!jobNameToStatistics.containsKey(jobname)) {
-          jobNameToStatistics.put(jobname, jobstat);
+        String jobNameReduce = jobname + REDUCE_SFX;
+        if (!jobNameToStatistics.containsKey(jobNameReduce)) {
+          jobNameToStatistics.put(jobNameReduce, jobstat);
         }
       }
     }
