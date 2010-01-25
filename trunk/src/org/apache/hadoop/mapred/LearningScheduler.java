@@ -491,7 +491,7 @@ public class LearningScheduler extends TaskScheduler {
     
     public int getUtility(LearningScheduler sched, JobInProgress jip, boolean isMap) {
       int priority  =
-              JobPriority.VERY_LOW.ordinal() - jip.getPriority().ordinal();
+              JobPriority.VERY_LOW.ordinal() + 1 - jip.getPriority().ordinal();
       return (int)Math.pow(2, 16 * priority - assignments.get(jip).get());
     }
   }
