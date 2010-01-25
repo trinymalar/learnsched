@@ -16,6 +16,7 @@ public class NaiveBayesClassifier implements Classifier {
   private ClassifierFeature features[];
   private Histogram classProbability;
   private AtomicInteger numSamples = new AtomicInteger(0);
+  private static final double ln_10_to_15 = Math.log(Math.pow(10,15));
 
   public NaiveBayesClassifier() {
     features = new ClassifierFeature[featureNames.length];
@@ -34,7 +35,7 @@ public class NaiveBayesClassifier implements Classifier {
       // we compute sum of logarithms
       retVal += Math.log(features[i].test(classNum, testVals[i]));
     }
-    return Math.exp(retVal);
+    return ln_10_to_15 + retVal;
   }
 
   public void train(int classNum, int[] trainVals) {
@@ -80,12 +81,9 @@ public class NaiveBayesClassifier implements Classifier {
     // LOG.info("Env Features" + Arrays.toString(envFeatures));
     double successDist = test(SUCCESS, envFeatures);
     double failureDist = test(FAILURE, envFeatures);
-    double sgn = 1;
-    if (failureDist != 0) {
-      if ((successDist / failureDist) < SUCCESS_THRESHOLD) {
-        sgn = -1;
-      }
-    }
+    // label failure only if failure distance > success distance by an order
+    // of magnitude.
+    double sgn = (successDist + 1 - failureDist >= 0) ? 1 : -1;
     return sgn * successDist;
   }
 
