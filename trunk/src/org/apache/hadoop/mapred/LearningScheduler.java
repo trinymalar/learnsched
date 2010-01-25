@@ -9,6 +9,10 @@ import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
 
+import java.util.Map;
+import java.util.Timer;
+import java.util.TimerTask;
+import java.util.concurrent.atomic.AtomicInteger;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.util.ReflectionUtils;
@@ -26,6 +30,8 @@ public class LearningScheduler extends TaskScheduler {
   // JobStatistics for currently running jobs
   private HashMap<String, JobStatistics> jobNameToStatistics;
   // Initialize tasks immediately after job has been submitted.
+  private HashMap<JobInProgress, AtomicInteger> assignments;
+
   private EagerTaskInitializationListener eagerInitListener;
   // job events listener
   private JobListener jobListener;
@@ -59,7 +65,8 @@ public class LearningScheduler extends TaskScheduler {
     this.joblist = new ArrayList<JobInProgress>();
     lastDecision = new HashMap<String, Decision>();
     falseNegatives = new HashMap<String, Integer>();
-    jobNameToStatistics = new HashMap<String, JobStatistics>();   
+    jobNameToStatistics = new HashMap<String, JobStatistics>();
+    assignments = new HashMap<JobInProgress, AtomicInteger>();
     this.jobListener = new JobListener();
     LOG.info("Scheduler Initiated");
   }
@@ -77,7 +84,7 @@ public class LearningScheduler extends TaskScheduler {
     
     utilFunc = (UtilityFunction) ReflectionUtils.newInstance(
             conf.getClass("mapred.learnsched.UtilityFunction",
-              FifoUtility.class, UtilityFunction.class), conf);
+              FairAssignmentUtility.class, UtilityFunction.class), conf);
     if (utilFunc == null) {
       LOG.error("Error in creating utility function instance, failing back to FIFO utility");
       utilFunc = new FifoUtility();
@@ -407,6 +414,8 @@ public class LearningScheduler extends TaskScheduler {
 
     if (allocateTask && task != null) {
       chosenTasks.add(task);
+      // Increment assignment count for the job
+      assignments.get(selectedJob).incrementAndGet();
       return chosenTasks;
     } else {
       return null;
@@ -433,6 +442,8 @@ public class LearningScheduler extends TaskScheduler {
     @Override
     public void jobAdded(JobInProgress job) {
       joblist.add(job);
+      assignments.put(job, new AtomicInteger());
+
       String statStrMap = job.getJobConf().get("learnsched.jobstat.map", NULL_JOB_STAT_STR );
       String jobname = getJobName(job);
       if (statStrMap != null) {
@@ -456,9 +467,33 @@ public class LearningScheduler extends TaskScheduler {
     @Override
     public void jobRemoved(JobInProgress job) {
       joblist.remove(job);
+      assignments.remove(job);
     }
 
     @Override
     public void jobUpdated(JobChangeEvent job) { /* do nothing */ }
   }
+
+  class FairAssignmentUtility implements UtilityFunction {
+    Timer assignmentRefresher;
+    public FairAssignmentUtility() {
+      assignmentRefresher = new Timer("Job Assignment Refresher", true);
+      TimerTask refresherTask = new TimerTask() {
+        public void run() {
+          for(Map.Entry<JobInProgress, AtomicInteger> e : assignments.entrySet()) {
+            e.getValue().set(0);
+          }
+        }
+      };
+      assignmentRefresher.schedule(refresherTask, MRConstants.HEARTBEAT_INTERVAL_MIN,
+              MRConstants.HEARTBEAT_INTERVAL_MIN);
+    }
+    
+    public int getUtility(LearningScheduler sched, JobInProgress jip, boolean isMap) {
+      int priority  =
+              JobPriority.VERY_LOW.ordinal() - jip.getPriority().ordinal();
+      return (int)Math.pow(2, 16 * priority - assignments.get(jip).get());
+    }
+  }
+
 }
