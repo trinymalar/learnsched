@@ -4,9 +4,9 @@ import java.io.IOException;
 import java.io.PrintWriter;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.Date;
 import java.util.HashMap;
-import java.util.LinkedList;
 import java.util.List;
 
 import java.util.Map;
@@ -55,7 +55,7 @@ public class LearningScheduler extends TaskScheduler {
   private double OVERLOAD_THRESHOLD = 1.0;
   private double PROCS_PER_CPU = 1.0;
   private int FALSE_NEGATIVE_LIMIT = 3;
-  private double FAILURE_PENALTY = 2;
+  private double SUCCESS_BOOST = 2;
   //whether to distinguish between jobs
   private boolean UNIQUE_JOBS = true;
   //whether to distinguish between map and reduce task of a job
@@ -86,8 +86,8 @@ public class LearningScheduler extends TaskScheduler {
             conf.getClass("mapred.learnsched.UtilityFunction",
               FairAssignmentUtility.class, UtilityFunction.class), conf);
     if (utilFunc == null) {
-      LOG.error("Error in creating utility function instance, failing back to FIFO utility");
-      utilFunc = new FifoUtility();
+      LOG.error("Error in creating utility function instance, failing back to FairAssignmentUtility");
+      utilFunc = new FairAssignmentUtility();
     }
 
     MIN_EXPECTED_UTILITY =
@@ -100,7 +100,7 @@ public class LearningScheduler extends TaskScheduler {
             (double) conf.getFloat("mapred.learnsched.ProcessesPerCpu", 1);
     FALSE_NEGATIVE_LIMIT =
             conf.getInt("mapred.learnsched.FalseNegativeLimit", 3);
-    FAILURE_PENALTY = conf.getInt("mapred.learnsched.FailurePenalty", 2);
+    SUCCESS_BOOST = conf.getInt("mapred.learnsched.SuccessBoost", 2);
     HISTORY_FILE_NAME =
             conf.get("mapred.learnsched.HistoryFile", "decisions_%s.txt");
     MULTIPLE_RESOURCE_OVERLOAD =
@@ -146,10 +146,20 @@ public class LearningScheduler extends TaskScheduler {
     LOG.info("Scheduler terminated");
   }
 
+  /**
+   * Convinience method to get job name of a JobInProgress
+   * @param job
+   * @return Job name string
+   */
   public String getJobName(JobInProgress job) {
     return (UNIQUE_JOBS) ? job.getJobConf().getJobName() : DEFAULT_JOB_NAME;
   }
 
+  /**
+   * Convinience method to get job name of a TaskStatus object
+   * @param task
+   * @return Job name string
+   */
   public String getJobName(TaskStatus task) {
     return getJobName(getJobInProgress(task));
   }
@@ -173,6 +183,10 @@ public class LearningScheduler extends TaskScheduler {
     return job.finishedReduces() < job.desiredReduces();
   }
 
+  /**
+   * Total number of pending map tasks in this MapReduce cluster
+   * @return Integer value indicating total number of pending map tasks
+   */
   public int totalPendingMaps() {
     int ret = 0;
     for (JobInProgress job : joblist) {
@@ -181,6 +195,10 @@ public class LearningScheduler extends TaskScheduler {
     return ret;
   }
 
+  /**
+   * Total number of pending reduce tasks in this MapReduce cluster
+   * @return Integer value indicating total number of pending reduce tasks
+   */
   public int totalPendingReduces() {
     int ret = 0;
     for (JobInProgress job : joblist) {
@@ -189,6 +207,11 @@ public class LearningScheduler extends TaskScheduler {
     return ret;
   }
 
+  /**
+   * Convinience method to get names of jobs whose tasks are running at a TaskTracker
+   * @param ttstatus
+   * @return Array of strings containing names of jobs
+   */
   public String[] getJobNamesAtTracker(TaskTrackerStatus ttstatus) {
     List<TaskStatus> tasks = ttstatus.getTaskReports();
     String[] ret = new String[tasks.size()];
@@ -198,6 +221,11 @@ public class LearningScheduler extends TaskScheduler {
     return ret;
   }
 
+  /**
+   * Convinience method to get JobInProgress object associated with the TaskStatus object
+   * @param task
+   * @return
+   */
   public JobInProgress getJobInProgress(TaskStatus task) {
     TaskAttemptID tid = task.getTaskID();
     JobID jobid = tid.getJobID();
@@ -226,6 +254,7 @@ public class LearningScheduler extends TaskScheduler {
             taskTrackerManager.getNumberOfUniqueHosts());
   }
 
+  // Validate an assignment decision of the task tracker
   private void validateDecision(String tracker, NodeEnvironment env) {
     Decision dd = lastDecision.get(tracker);
 
@@ -233,23 +262,35 @@ public class LearningScheduler extends TaskScheduler {
       return;
     }
 
+    // A decision is invalid only if an assignment was made and it resulted
+    // in overload on the concerned TaskTracker
     if (env.overLoaded(PROCS_PER_CPU, MULTIPLE_RESOURCE_OVERLOAD)) {
       if (dd.wasTaskAssigned()) {
         notifyResult(dd, false);
       }
     } else {
       if (!dd.wasTaskAssigned() && dd.getNodeEnv().underLoaded(PROCS_PER_CPU)) {
-        // a task was not assigned even when the node was under loaded
+        // False Negative: A task was not assigned even when the node was under loaded
+        // This could happen if the scheduler is learning phase, where a large number
+        // of node environment states are labelled as false negatives. To counter
+        // this, we keep a count of successive false negatives. While making
+        // an assignment, if the number of successive false negatives is
+        // greater than FALSE_NEGATIVE_LIMIT, an assignment is forcefully made,
+        // ignoring the prediction of the classifier.
         Integer preCount = falseNegatives.get(tracker);
         falseNegatives.put(tracker, preCount == null ? 1 : preCount + 1);
       } else if (dd.wasTaskAssigned()) {
         falseNegatives.put(tracker, 0);
       }
-      for (int i = 0; i < FAILURE_PENALTY; i++) {
+      // Every success is trained multiple times to increase overall 'success'
+      // probability. This is done because we get much more 'failure' samples
+      // than 'success' samples.
+      for (int i = 0; i < SUCCESS_BOOST; i++) {
         notifyResult(dd, true);
       }
     }
 
+    // Log the decision
     if (decisionWriter != null) {
       decisionWriter.println(dd.toString());
       decisionWriter.flush();
@@ -257,6 +298,11 @@ public class LearningScheduler extends TaskScheduler {
     lastDecision.remove(tracker);
   }
 
+  /**
+   * Update the classifier with decision result.
+   * @param dd Evaluated decision
+   * @param result Result of decision evaluation, true => success; false => failure
+   */
   public void notifyResult(Decision dd, boolean result) {
     if (dd != null) {
       dd.setResult(result);
@@ -322,7 +368,11 @@ public class LearningScheduler extends TaskScheduler {
     double maxUtilArray[] = {0, 0, 0};
     double tmpUtilArray[] = {0, 0, 0};
 
-    Collection<JobInProgress> runningJobs = getRunningJobs();
+    List<JobInProgress> runningJobs = getRunningJobs();
+    // Shuffle the list so that order of job submission does not affect
+    // the task assignment decision. Any such order must be enforced by the
+    // utility function
+    Collections.shuffle(runningJobs);
 
     for (JobInProgress job : runningJobs) {
       double tmpUtilM[] = getExepctedUtility(ttstatus, job, true, env);
@@ -377,9 +427,8 @@ public class LearningScheduler extends TaskScheduler {
       boolean veryLowLoad = env.underLoaded(PROCS_PER_CPU * UNDERLOAD_THRESHOLD);
       // check if the node is not in a 'false negative loop'
       // A node is said to be in a false negative loop if no tasks have been
-      // assigned to the node in last FALSE_NEGATIVE_LIMIT number of heaertbeats
+      // assigned to the node in last FALSE_NEGATIVE_LIMIT number of heaertbeats,
       // while the node being underloaded this entier time.
-      // This happens particularly when nodes are moving up from low load state
       Integer falseNegativeCount = falseNegatives.get(trackerName);
       int fnc = (falseNegativeCount == null) ? 0 : falseNegativeCount.intValue();
       // we are in false negative loop only if tasks are not being allocated.
@@ -404,8 +453,8 @@ public class LearningScheduler extends TaskScheduler {
     }
 
     TaskAttemptID tid = allocateTask && (task != null) ? task.getTaskID() : null;
-    // Record the decision for this tracker. This decision will be evaluated in
-    // next heartbeat from the tracker
+    // Record the decision for this tracker. This decision will be evaluated when
+    // next heartbeat from the tracker is received
     Decision dd = addPendingDecision(trackerName, env, selectedJob,
             tid, maxUtilArray, allocateTask, jobstat);
     lastDecision.put(trackerName, dd);
@@ -415,7 +464,7 @@ public class LearningScheduler extends TaskScheduler {
     if (allocateTask && task != null) {
       chosenTasks.add(task);
       // Increment assignment count for the job
-      assignments.get(selectedJob).incrementAndGet();
+      assignments.get(selectedJob).incrementAndGet();      
       return chosenTasks;
     } else {
       return null;
@@ -423,7 +472,7 @@ public class LearningScheduler extends TaskScheduler {
   }
 
   public List<JobInProgress> getRunningJobs() {
-    LinkedList<JobInProgress> rjobs = new LinkedList<JobInProgress>();
+    List<JobInProgress> rjobs = new ArrayList<JobInProgress>();
     for (JobInProgress job : joblist) {
       if (job.getStatus().getRunState() == JobStatus.RUNNING) {
         rjobs.add(job);

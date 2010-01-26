@@ -35,6 +35,7 @@ public class NaiveBayesClassifier implements Classifier {
       // we compute sum of logarithms
       retVal += Math.log(features[i].test(classNum, testVals[i]));
     }
+    // We add a constant to the log likelihood in order to make it positive.
     return ln_10_to_15 + retVal;
   }
 
@@ -72,7 +73,15 @@ public class NaiveBayesClassifier implements Classifier {
     return envFeatures;
   }
 
+  /**
+   * Returns the log likelihood of an assignment being successful, with sign of the
+   * return value indicating the class label: A positive value means a success prediction.
+   * @param jobstat Job resource usage statistics
+   * @param env NodeEnvironment for the concerned node
+   * @return ln(10^15) + log likelihood of success
+   */
   public double getSuccessDistance(JobStatistics jobstat, NodeEnvironment env) {
+    // First few samples are always successful.
     if (numSamples.get() <= MIN_SAMPLES) {
       return 1.0;
     }
@@ -82,7 +91,7 @@ public class NaiveBayesClassifier implements Classifier {
     double successDist = test(SUCCESS, envFeatures);
     double failureDist = test(FAILURE, envFeatures);
     // label failure only if failure distance > success distance by an order
-    // of magnitude.
+    // of magnitude. Sign of the return value indicates success/failure
     double sgn = (successDist + 1 - failureDist >= 0) ? 1 : -1;
     return sgn * successDist;
   }
@@ -92,9 +101,16 @@ public class NaiveBayesClassifier implements Classifier {
   }
 }
 
+/**
+ * Class for a feature variable of the classifier
+ * @author meghadmin
+ */
 class ClassifierFeature {
 
   private String name;
+  /**
+   * Array of Histograms. There should be one Histogram per class label
+   */
   private Histogram classHists[];
 
   public ClassifierFeature(String name, int numClasses) {
