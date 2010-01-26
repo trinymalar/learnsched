@@ -486,13 +486,14 @@ public class LearningScheduler extends TaskScheduler {
         }
       };
       assignmentRefresher.schedule(refresherTask, MRConstants.HEARTBEAT_INTERVAL_MIN,
-              MRConstants.HEARTBEAT_INTERVAL_MIN);
+              MRConstants.HEARTBEAT_INTERVAL_MIN/2);
     }
     
     public int getUtility(LearningScheduler sched, JobInProgress jip, boolean isMap) {
-      int priority  =
-              JobPriority.VERY_LOW.ordinal() + 1 - jip.getPriority().ordinal();
-      return (int)Math.pow(2, 16 * priority - assignments.get(jip).get());
+      int priority  = jip.getPriority().ordinal() + 1;
+      AtomicInteger asgn = assignments.get(jip);
+      if (asgn == null) return 0;
+      return (int)Math.pow(2, 64 - priority * asgn.get());
     }
   }
 
