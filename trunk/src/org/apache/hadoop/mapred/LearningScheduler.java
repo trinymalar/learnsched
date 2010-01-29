@@ -8,7 +8,6 @@ import java.util.Collections;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
-
 import java.util.Map;
 import java.util.Timer;
 import java.util.TimerTask;
@@ -151,7 +150,7 @@ public class LearningScheduler extends TaskScheduler {
    * @param job
    * @return Job name string
    */
-  public String getJobName(JobInProgress job) {
+  String getJobName(JobInProgress job) {
     return (UNIQUE_JOBS) ? job.getJobConf().getJobName() : DEFAULT_JOB_NAME;
   }
 
@@ -160,7 +159,7 @@ public class LearningScheduler extends TaskScheduler {
    * @param task
    * @return Job name string
    */
-  public String getJobName(TaskStatus task) {
+  String getJobName(TaskStatus task) {
     return getJobName(getJobInProgress(task));
   }
 
@@ -170,7 +169,7 @@ public class LearningScheduler extends TaskScheduler {
     return jobstat == null ? NULL_JOB_STAT : jobstat;
   }
 
-  public int getJobClusterID(JobInProgress job, boolean isMap) {
+  int getJobClusterID(JobInProgress job, boolean isMap) {
     String jobName = getJobName(job) + (isMap ? MAP_SFX : REDUCE_SFX);
     return jobName.hashCode();
   }
@@ -212,7 +211,7 @@ public class LearningScheduler extends TaskScheduler {
    * @param ttstatus
    * @return Array of strings containing names of jobs
    */
-  public String[] getJobNamesAtTracker(TaskTrackerStatus ttstatus) {
+  String[] getJobNamesAtTracker(TaskTrackerStatus ttstatus) {
     List<TaskStatus> tasks = ttstatus.getTaskReports();
     String[] ret = new String[tasks.size()];
     for (int i = 0; i < ret.length; i++) {
@@ -226,7 +225,7 @@ public class LearningScheduler extends TaskScheduler {
    * @param task
    * @return
    */
-  public JobInProgress getJobInProgress(TaskStatus task) {
+  JobInProgress getJobInProgress(TaskStatus task) {
     TaskAttemptID tid = task.getTaskID();
     JobID jobid = tid.getJobID();
     JobTracker jt = (JobTracker) taskTrackerManager;
@@ -370,8 +369,9 @@ public class LearningScheduler extends TaskScheduler {
 
     List<JobInProgress> runningJobs = getRunningJobs();
     // Shuffle the list so that order of job submission does not affect
-    // the task assignment decision. Any such order must be enforced by the
-    // utility function
+    // the task assignment decision. Any such order, if desired, must be
+    // enforced by the utility function. We are shuffling a copy of the original
+    // jobs list.
     Collections.shuffle(runningJobs);
 
     for (JobInProgress job : runningJobs) {
@@ -471,7 +471,7 @@ public class LearningScheduler extends TaskScheduler {
     }
   }
 
-  public List<JobInProgress> getRunningJobs() {
+  List<JobInProgress> getRunningJobs() {
     List<JobInProgress> rjobs = new ArrayList<JobInProgress>();
     for (JobInProgress job : joblist) {
       if (job.getStatus().getRunState() == JobStatus.RUNNING) {
@@ -523,6 +523,12 @@ public class LearningScheduler extends TaskScheduler {
     public void jobUpdated(JobChangeEvent job) { /* do nothing */ }
   }
 
+  /** Utility function that tries to achieve fairness by 
+   * maximimizing utility of tasks that have the least number of task
+   * assignments in a given time interval. JobPriority is also taken into 
+   * consideration while calculating utility. Utility of a job is
+   * given by 2^(K - jop.priority - job.assignments).
+   */
   class FairAssignmentUtility implements UtilityFunction {
     Timer assignmentRefresher;
     public FairAssignmentUtility() {
@@ -539,10 +545,10 @@ public class LearningScheduler extends TaskScheduler {
     }
     
     public int getUtility(LearningScheduler sched, JobInProgress jip, boolean isMap) {
-      int priority  = jip.getPriority().ordinal() + 1;
+      int priority  = jip.getPriority().ordinal();
       AtomicInteger asgn = assignments.get(jip);
       if (asgn == null) return 0;
-      return (int)Math.pow(2, 64 - priority * asgn.get());
+      return (int)Math.pow(2, 64 - priority - asgn.get());
     }
   }
 
