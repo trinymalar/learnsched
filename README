@@ -1,19 +1,15 @@
 Following instructions assume that you have basic knowledge in building and
 configuring Hadoop. Please refer the Hadoop documentation for related details.
 
-Building Learning Scheduler:
-1. Copy the Hadoop jar files, and jar files in Hadoop's lib directory to learnsched/lib/
-2. Create build.properties and add the following property
+Building the scheduler:
+1. Checkout hadoop-mapreduce from Hadoop svn repository.
+2. Checkout scheduler code.
+3. Create build.properties in toplevel directory of teh scheduler and add the following property
     hadoop.home.dir=/path/to/hadoop/toplevel/directory
-3. Build the project, the scheduler jar file will be automatically copied to Hadoop's lib directory.
+4. Build using ANT, the scheduler jar file will be automatically copied to Hadoop's lib directory.
    If that fails, copy the scheduler jar file from build/jar to Hadoop's lib directory manually.
-   
 
-Using the scheduler:
-1. Apply the patch to enable state information reporting.
-2. Build Hadoop.
-3. Copy stated.py to Hadoop top level directory.
-4. Configure Hadoop to use the learning scheduler.
+Configure Hadoop to use the learning scheduler.
     Add/Change this in mapred-site.xml
     <property>
         <name>mapred.tasktracker.map.tasks.maximum</name>
@@ -30,5 +26,4 @@ Using the scheduler:
         <name>mapred.jobtracker.taskScheduler</name>
         <value>org.apache.hadoop.mapred.LearningScheduler</value>
     </property>
-5. Start Hadoop and run the jobs
 
