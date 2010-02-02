@@ -1,15 +1,13 @@
 #!/usr/bin/env python
-import sys, urllib, os, threading, time, tempfile
+import sys
+import urllib
+import threading
+import time
+import tempfile
 import random
 TMP_FNAME = "big_temp_file.dat"
 SLEEP_TIME = 15
-urls = ["http://10.2.4.162/data/file.avi",
-        "http://10.2.4.162/data/file.avi",
-        "http://10.2.4.131/data/file.avi",
-        "http://10.2.4.131/data/file.avi",
-        "http://10.2.4.131/data/file.avi",
-        "http://10.2.4.131/data/file.avi",
-        "http://10.2.4.181/data/file.avi"]
+urls = [] # include urls to be downloaded here.
 
 DOWNLOAD_COUNT = 2
 

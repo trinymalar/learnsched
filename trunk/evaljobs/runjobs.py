@@ -1,10 +1,14 @@
 #!/usr/bin/env python
 from __future__ import with_statement
-import random, time, threading, sys, subprocess
+import random
+import time
+import threading
+import sys
+import subprocess
 
 
 # Hadoop paths
-HADOOP_HOME = "/home/hdev/hadoop-0.20.0"
+HADOOP_HOME = "<hadoop dir>"
 HADOOP_STREAMING_JAR = HADOOP_HOME + "/contrib/hadoop-0.20.0-streaming.jar"
 # job submission rate
 JOB_SUBMIT_RATE = 5 
@@ -74,8 +78,7 @@ def main():
     # run the workload LOOP_CNT times
     for i in xrange(LOOP_CNT):
         input_job, jobs = read_jobs(sys.argv[1])
-        print "*"*20,i,"*"*20
-        before = time.time()
+        print "*"*20,i,"*"*20       
         # first create random text input
         input_job.start()
         input_job.join()

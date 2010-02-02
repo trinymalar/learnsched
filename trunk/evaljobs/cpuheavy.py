@@ -1,5 +1,9 @@
 #!/usr/bin/env python
-import sys, tempfile, urllib, random, threading, time
+import sys
+import tempfile
+import random
+import threading
+import time
 
 TASK_RUN_TIME = 60 # in seconds
 CPU_ACT_LIM = 2**10
@@ -11,7 +15,6 @@ MAX_ACTS = 5
 CONTINUE_ACTIVITY = True
 
 def cpuact():
-    modz = 0
     for i in xrange(1, random.randint(1, CPU_ACT_LIM)):
       for j in xrange(1, i):
         modz = i % j 

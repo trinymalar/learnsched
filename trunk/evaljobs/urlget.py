@@ -9,9 +9,8 @@ TASK_RUNTIME = 60
 SLEEP_TIME_MAX = 2
 
 
-urls = [ "http://10.2.4.181/websim/", 
-         "http://10.2.4.162/websim/", 
-         "http://10.2.4.162/websim/"]
+urls = [ ]
+       #Ex:  "http://10.2.4.162/websim/"]
 print urls
 i = 0
 CONTINUE_ACTIVITY = True

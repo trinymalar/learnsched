@@ -1,6 +1,11 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-import sys, tempfile, urllib, random, threading, time
+import sys
+import tempfile
+import urllib
+import random
+import threading
+import time
 
 TASK_RUNTIME = 60 # in seconds
 CPU_ACT_LIM = 2**8
@@ -14,10 +19,9 @@ WORK_TIME_U = 1.0
 WORK_TIME_VAR = 0
 SLEEP_WORK_RATIO = 3 
 
-urls = [
- "http://10.2.4.181/websim/",
- "http://10.2.4.162/websim/",
- "http://10.2.4.162/websim/"]
+urls = []
+# Example: "http://10.2.4.181/websim/"]
+ 
 
 NET_FILE_COUNT = 499
 
