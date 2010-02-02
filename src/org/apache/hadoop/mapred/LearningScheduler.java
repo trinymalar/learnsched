@@ -32,7 +32,6 @@ import java.util.concurrent.atomic.AtomicInteger;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.util.ReflectionUtils;
-import org.apache.hadoop.mapreduce.server.tasktracker.*;
 
 public class LearningScheduler extends TaskScheduler {
 
@@ -59,6 +58,8 @@ public class LearningScheduler extends TaskScheduler {
   private JobListener jobListener;
   // PrintWriter for logging decisions
   private PrintWriter decisionWriter;
+  // CPU limit
+  public static double UCPU_LIMIT = 80;
 
   // constants
   private static final JobStatistics NULL_JOB_STAT = new JobStatistics("0:0:0:0");
@@ -113,7 +114,8 @@ public class LearningScheduler extends TaskScheduler {
               NaiveBayesClassifier.class, Classifier.class), conf);
     
     if (classifier == null) {
-      LOG.error("Error in creating classifier instance, failing back to Naive Bayes Classifier");
+      LOG.error("Error in creating classifier instance, " +
+              "failing back to Naive Bayes Classifier");
       classifier = new NaiveBayesClassifier();
     }
 
@@ -135,13 +137,15 @@ public class LearningScheduler extends TaskScheduler {
     HISTORY_FILE_NAME =
             conf.get("mapred.learnsched.HistoryFile", "decisions_%s.txt");
     MULTIPLE_RESOURCE_OVERLOAD =
-            conf.getBoolean("mapred.learnsched.MultipleResources", false);
+            conf.getBoolean("mapred.learnsched.MultipleResources", true);
     UNIQUE_JOBS =
             conf.getBoolean("mapred.learnsched.UniqueJobs", true);
     MAP_NEQ_REDUCE =
             conf.getBoolean("mapred.learnsched.MapDifferentFromReduce", true);
     MAX_ASGN_IGNORE_LIMIT =
             conf.getInt("mapred.learnsched.NoAssignmentLimit", 5);
+    UCPU_LIMIT =
+            conf.getInt("mapred.learnsched.CpuUsageLevel", 60);
     LOG.info("Scheduler Configured");
   }
 
