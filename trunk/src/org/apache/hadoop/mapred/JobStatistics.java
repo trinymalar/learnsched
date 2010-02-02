@@ -27,11 +27,14 @@ public class JobStatistics {
   public JobStatistics(String statStr) {
     //LearningScheduler.LOG.info("New job stat string:" + statStr);
     String toks[] = statStr.split(":");
-
-    cpu = Double.parseDouble(toks[0]);
-    disk = Double.parseDouble(toks[1]);
-    net = Double.parseDouble(toks[2]);
-    memory = Double.parseDouble(toks[3]);
+    try {
+      cpu = Double.parseDouble(toks[0]);
+      disk = Double.parseDouble(toks[1]);
+      net = Double.parseDouble(toks[2]);
+      memory = Double.parseDouble(toks[3]);
+    } catch (NumberFormatException nfe) {
+      cpu = disk = net = memory = 0;
+    }
   }
 
   public String toString() {

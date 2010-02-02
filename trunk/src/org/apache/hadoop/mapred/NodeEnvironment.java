@@ -25,7 +25,7 @@ class NodeEnvironment {
   String trackerName;
   public static final int loadScaleFactor = 10;
   double ucpu;
-  public static final double UCPU_LIMIT = 95;
+  
   public static final double DISKIO_LIMIT = 15;
   public static final double NETIO_LIMIT = 25;
   private static double ALPH = 0.75;
@@ -38,7 +38,7 @@ class NodeEnvironment {
     numCpus = resources.getNumProcessors();
     memTotal = resources.getTotalPhysicalMemory();
     memUsed = memTotal - resources.getAvailablePhysicalMemory();
-    cpuFreq = resources.getCpuFrequency();
+    cpuFreq = resources.getCpuFrequency()/500000; // KHz to 0.5 GHz
     trackerName = ttstatus.getTrackerName();
     ucpu = resources.getCpuUsage();
   }
@@ -51,7 +51,7 @@ class NodeEnvironment {
     numCpus = resources.getNumProcessors();
     memTotal = resources.getTotalPhysicalMemory();
     memUsed = memTotal - resources.getAvailablePhysicalMemory();
-    cpuFreq = resources.getCpuFrequency();
+    cpuFreq = resources.getCpuFrequency()/1000000;
     trackerName = ttstatus.getTrackerName();
     ucpu = ALPH * ucpu  + (1 - ALPH) * resources.getCpuUsage();
   }
@@ -100,7 +100,7 @@ class NodeEnvironment {
 
   public boolean multipleResourcesOverloaded(double procsPerCpu) {
     boolean loadAvgOverload = Math.ceil(loadAverage) > (procsPerCpu * numCpus);
-    boolean ucpuOverload = ucpu > UCPU_LIMIT;   
+    boolean ucpuOverload = ucpu > LearningScheduler.UCPU_LIMIT;
     return loadAvgOverload && ucpuOverload;
   }
 }

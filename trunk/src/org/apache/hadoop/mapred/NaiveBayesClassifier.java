@@ -82,7 +82,7 @@ public class NaiveBayesClassifier implements Classifier {
     envFeatures[i++] = (int) env.ucpu;
     envFeatures[i++] = (int) (env.memUsed / (1024*1204*1024));
     envFeatures[i++] = (int) env.numCpus;
-    envFeatures[i++] = (int) (env.cpuFreq / 10);
+    envFeatures[i++] = (int) (env.cpuFreq);
     envFeatures[i++] = (int) (env.numMaps + env.numReduces);
     return envFeatures;
   }
@@ -101,8 +101,7 @@ public class NaiveBayesClassifier implements Classifier {
       return 1.0;
     }
     // first construct features from the node environment
-    int envFeatures[] = makeFeatures(jobstat, env);
-    // LOG.info("Env Features" + Arrays.toString(envFeatures));
+    int envFeatures[] = makeFeatures(jobstat, env);   
     double successDist = test(SUCCESS, envFeatures);
     double failureDist = test(FAILURE, envFeatures);
     // label failure only if failure distance > success distance by an order
@@ -118,7 +117,6 @@ public class NaiveBayesClassifier implements Classifier {
 
 /**
  * Class for a feature variable of the classifier
- * @author meghadmin
  */
 class ClassifierFeature {
 
