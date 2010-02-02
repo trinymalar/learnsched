@@ -9,8 +9,6 @@ public class Histogram {
   private HashMap<Integer, AtomicInteger> counts;
   private AtomicInteger total;
   private String name;
-  private static final long seed = 1999;
-  private static final double PROBABILITY_RESOLUTION = 1e-4;
 
   public Histogram() {
     this.counts = new HashMap<Integer, AtomicInteger>();
