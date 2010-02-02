@@ -8,11 +8,11 @@
     <property name="jar.dir" value="${build.dir}/jar"/>
     <property name="lib.dir" value="${project.base}/lib"/>
    
-    <property name="hadoop.lib.dir" value="${hadoop.home.dir}/lib"/>
-    <property name="hadoop.build.classes.dir" value="${hadoop.home.dir}/build/classes"/>
+    <property name="hadoop.lib.dir" value="${hadoop.home.dir}/build/ivy/lib/Hadoop/common"/>   
+    <property name="hadoop.build.dir" value = "${hadoop.home.dir}/build/"/>
 
     <path id="classpath.hadoop.jars">
-      <fileset dir="${hadoop.home.dir}" includes="**/*.jar"/>
+      <fileset dir="${hadoop.build.dir}" includes="**/*.jar"/>
     </path>
 
     <path id="classpath.hadoop.lib.jars">
