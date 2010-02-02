@@ -1,5 +1,7 @@
 package org.apache.hadoop.mapred;
 
+import org.apache.hadoop.mapreduce.TaskType;
+
 public class Decision {
 
   private NodeEnvironment env;
@@ -26,7 +28,7 @@ public class Decision {
     //this.jobClusterID = jobClusterID;
     this.selectedJob = jobName;
     this.tid = tid;
-    this.isMap = (tid != null) ? tid.isMap() : true;
+    this.isMap = (tid != null) ? tid.getTaskType() == TaskType.MAP : true;
     this.taskAssigned = assignTask;
     this.successDist = predictions[2];
     this.prediction = successDist > 0;

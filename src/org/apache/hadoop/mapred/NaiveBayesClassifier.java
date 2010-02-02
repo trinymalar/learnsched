@@ -5,14 +5,13 @@ import java.util.concurrent.atomic.AtomicInteger;
 public class NaiveBayesClassifier implements Classifier {
 
   private static final String featureNames[] = {"job.cpu", "job.disk", "job.net", "job.memory",
-    "load", "memUsed", "swapUsed", "numCpus",
-    "cpuFreq", /*"memTotal", "swapTotal",*/ "numTasks"};
+    "load", "ucpu", "memUsed", "numCpus", "cpuFreq", "numTasks"};
   //public static final Log LOG = LogFactory.getLog(NaiveBayesClassifier.class);
   public static final int SUCCESS = 0;
   public static final int FAILURE = 1;
   public static final int MIN_SAMPLES = 3;
   public static final int MAX_SAMPLES = 10000;
-  public static final double SUCCESS_THRESHOLD = 0.9;
+  public static final double SUCCESS_MARGIN = 1.0;
   private ClassifierFeature features[];
   private Histogram classProbability;
   private AtomicInteger numSamples = new AtomicInteger(0);
@@ -63,18 +62,17 @@ public class NaiveBayesClassifier implements Classifier {
     envFeatures[i++] = (int) jobstat.net;
     envFeatures[i++] = (int) jobstat.memory;
     envFeatures[i++] = (int) Math.ceil(env.loadAverage * NodeEnvironment.loadScaleFactor);
-    envFeatures[i++] = env.memUsed / (1024);
-    envFeatures[i++] = env.swapUsed / (1024);
-    envFeatures[i++] = env.numCpus;
-    envFeatures[i++] = env.cpuFreq / 10;
-    //envFeatures[i++] = env.memTotal / (1024);
-    //envFeatures[i++] = env.swapTotal;
-    envFeatures[i++] = env.numMaps + env.numReduces;
+    envFeatures[i++] = (int) env.ucpu;
+    envFeatures[i++] = (int) (env.memUsed / (1024*1204*1024));
+    envFeatures[i++] = (int) env.numCpus;
+    envFeatures[i++] = (int) (env.cpuFreq / 10);
+    envFeatures[i++] = (int) (env.numMaps + env.numReduces);
     return envFeatures;
   }
 
   /**
-   * Returns the log likelihood of an assignment being successful, with sign of the
+   * Returns the log likelihood of an assignment being successful,
+   * (i.e. it does not result in overload), with sign of the
    * return value indicating the class label: A positive value means a success prediction.
    * @param jobstat Job resource usage statistics
    * @param env NodeEnvironment for the concerned node
@@ -92,7 +90,7 @@ public class NaiveBayesClassifier implements Classifier {
     double failureDist = test(FAILURE, envFeatures);
     // label failure only if failure distance > success distance by an order
     // of magnitude. Sign of the return value indicates success/failure
-    double sgn = (successDist + 1 - failureDist >= 0) ? 1 : -1;
+    double sgn = (successDist + SUCCESS_MARGIN - failureDist >= 0) ? 1 : -1;
     return sgn * successDist;
   }
 

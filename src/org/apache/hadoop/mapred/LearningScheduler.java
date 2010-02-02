@@ -15,6 +15,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.util.ReflectionUtils;
+import org.apache.hadoop.mapreduce.server.tasktracker.*;
 
 public class LearningScheduler extends TaskScheduler {
 
@@ -24,13 +25,18 @@ public class LearningScheduler extends TaskScheduler {
   private UtilityFunction utilFunc;
   // classifier object
   private Classifier classifier;
+  // Last decision for a task tracker. Tracker is identified using its name
   private HashMap<String, Decision> lastDecision;
+  // Node Environment of a task tracker
+  private HashMap<String, NodeEnvironment> trackerEnv;
+  // Number of false negatives for a task tracker.
   private HashMap<String, Integer> falseNegatives;
   // JobStatistics for currently running jobs
   private HashMap<String, JobStatistics> jobNameToStatistics;
-  // Initialize tasks immediately after job has been submitted.
+  // Number of task assignments for each JIP.
   private HashMap<JobInProgress, AtomicInteger> assignments;
 
+  // Initialize tasks immediately after job has been submitted.
   private EagerTaskInitializationListener eagerInitListener;
   // job events listener
   private JobListener jobListener;
@@ -49,19 +55,32 @@ public class LearningScheduler extends TaskScheduler {
   private static String HISTORY_FILE_NAME = new String();
   // whether to consider multiple resources while determining overload
   private boolean MULTIPLE_RESOURCE_OVERLOAD;
+  // minimum expected utility of a job so that it is considered for assignment
   private double MIN_EXPECTED_UTILITY = 0.0;
+  // node is 'underloaded' if load < UNDERLOAD_THRESHOLD
   private double UNDERLOAD_THRESHOLD = 0.8;
   private double OVERLOAD_THRESHOLD = 1.0;
+  // number of active processes per CPU. In case load averages are used for
+  // deciding overload
   private double PROCS_PER_CPU = 1.0;
+  // successive number of 'no assignment' decisions to allow while the node being
+  // overloaded
   private int FALSE_NEGATIVE_LIMIT = 3;
+  // each 'success' sample is trained these many times
   private double SUCCESS_BOOST = 2;
-  //whether to distinguish between jobs
+  // whether to distinguish between jobs
   private boolean UNIQUE_JOBS = true;
-  //whether to distinguish between map and reduce task of a job
+  // whether to distinguish between map and reduce task of a job
   private boolean MAP_NEQ_REDUCE = true;
+  // The max number of times a job can be denied task assignment because its tasks
+  // are predicted to overload the task tracker. Once this limit is crossed,
+  // probability of not overloading the tracker for this job is forcefully set to
+  // one.
+  private int MAX_ASGN_IGNORE_LIMIT = 0;
 
   public LearningScheduler() {
     this.joblist = new ArrayList<JobInProgress>();
+    trackerEnv = new HashMap<String, NodeEnvironment>();
     lastDecision = new HashMap<String, Decision>();
     falseNegatives = new HashMap<String, Integer>();
     jobNameToStatistics = new HashMap<String, JobStatistics>();
@@ -80,12 +99,8 @@ public class LearningScheduler extends TaskScheduler {
       LOG.error("Error in creating classifier instance, failing back to Naive Bayes Classifier");
       classifier = new NaiveBayesClassifier();
     }
-    
-    utilFunc = (UtilityFunction) ReflectionUtils.newInstance(
-            conf.getClass("mapred.learnsched.UtilityFunction",
-              FairAssignmentUtility.class, UtilityFunction.class), conf);
+
     if (utilFunc == null) {
-      LOG.error("Error in creating utility function instance, failing back to FairAssignmentUtility");
       utilFunc = new FairAssignmentUtility();
     }
 
@@ -108,6 +123,9 @@ public class LearningScheduler extends TaskScheduler {
             conf.getBoolean("mapred.learnsched.UniqueJobs", true);
     MAP_NEQ_REDUCE =
             conf.getBoolean("mapred.learnsched.MapDifferentFromReduce", true);
+    MAX_ASGN_IGNORE_LIMIT =
+            conf.getInt("mapred.learnsched.NoAssignmentLimit", 5);
+    LOG.info("Scheduler Configured");
   }
 
   @Override
@@ -317,7 +335,6 @@ public class LearningScheduler extends TaskScheduler {
   private Decision addPendingDecision(String tracker, NodeEnvironment env,
           JobInProgress job, TaskAttemptID tid, double[] predictions,
           boolean assignTask, JobStatistics jobstat) {
-    //int jobClusterID = getJobClusterID(job, tid.isMap());
     String jobName = getJobName(job);
     Decision de =
             new Decision(env, jobName, tid, predictions, assignTask);
@@ -332,22 +349,50 @@ public class LearningScheduler extends TaskScheduler {
     double ret[] = new double[3];
     JobStatistics jobstat = getJobStatistics(job, isMap);
     int utility = utilFunc.getUtility(this, job, isMap);
-    double successDist = classifier.getSuccessDistance(jobstat, env);
-    LOG.info(getJobName(job) + (isMap ? "_map" : "_reduce") + " Utility = " + utility + " Likelihood: " + successDist);
+
+    // check if this job's tasks are not being assigned for some time
+    // if thats the case, forcefull set successDist = 1
+    double successDist = 0;
+    AtomicInteger asgn = assignments.get(job);
+    if (asgn != null) {
+      if (asgn.compareAndSet(MAX_ASGN_IGNORE_LIMIT, 0)) {
+        successDist = 1;
+      }
+    } else {
+      successDist = classifier.getSuccessDistance(jobstat, env);
+    }
+
+    LOG.debug(getJobName(job) + (isMap ? "_map" : "_reduce") 
+                              + " Utility = " + utility
+                              + " Likelihood: " + successDist);
     ret[0] = successDist * utility;
     ret[1] = utility;
     ret[2] = successDist;
     return ret;
   }
 
+  private NodeEnvironment updatedTrackerEnvironment(TaskTrackerStatus tt) {
+    NodeEnvironment nenv = trackerEnv.get(tt.getTrackerName());
+    if (nenv == null) {
+      nenv = new NodeEnvironment(tt, this);
+      trackerEnv.put(tt.getTrackerName(), nenv);
+    }
+    nenv.update(tt);
+    return nenv;
+  }
+
   @Override
-  public List<Task> assignTasks(TaskTrackerStatus ttstatus) throws IOException {
+  public List<Task> 
+          assignTasks(org.apache.hadoop.mapreduce.server.jobtracker.TaskTracker tt)
+          throws IOException {
+    TaskTrackerStatus ttstatus = tt.getStatus();
     // the environment vector
-    NodeEnvironment env = new NodeEnvironment(ttstatus, this);
+    NodeEnvironment env = updatedTrackerEnvironment(ttstatus);
     ClusterStatus clusterStatus = taskTrackerManager.getClusterStatus();
     final int numTaskTrackers = clusterStatus.getTaskTrackers();
+
     final int numTasks = ttstatus.countMapTasks() + ttstatus.countReduceTasks();
-    String trackerName = ttstatus.getTrackerName();
+    String trackerName = tt.getTrackerName();
 
     // validate last decision for this tracker
     validateDecision(trackerName, env);
@@ -357,7 +402,7 @@ public class LearningScheduler extends TaskScheduler {
             env.toString());
     // don't allocate tasks if node is heavily loaded
     if (env.overLoaded(PROCS_PER_CPU * OVERLOAD_THRESHOLD, MULTIPLE_RESOURCE_OVERLOAD)) {
-      LOG.info(trackerName + " >>> NOT ALLOCATING BECAUSE OVERLOAD");
+      LOG.debug(trackerName + " >>> NOT ALLOCATING BECAUSE OVERLOAD");
       return null;
     }
 
@@ -370,27 +415,30 @@ public class LearningScheduler extends TaskScheduler {
     List<JobInProgress> runningJobs = getRunningJobs();
     // Shuffle the list so that order of job submission does not affect
     // the task assignment decision. Any such order, if desired, must be
-    // enforced by the utility function. We are shuffling a copy of the original
+    // enforced by the utility function. We are shuffling a *copy* of the original
     // jobs list.
     Collections.shuffle(runningJobs);
 
     for (JobInProgress job : runningJobs) {
+
       double tmpUtilM[] = getExepctedUtility(ttstatus, job, true, env);
       double expectedUtilM = tmpUtilM[0];
-      LOG.info("E.U. of Map tasks " + getJobName(job) + " = " + expectedUtilM);
+      LOG.debug("E.U. of Map tasks " + getJobName(job) + " = " + expectedUtilM);
+
       double tmpUtilR[] = {Double.NEGATIVE_INFINITY, 0, 0};
       double expectedUtilR = Double.NEGATIVE_INFINITY;
       if (job.desiredReduces() > 0) {
         // Get EU of reduce tasks only if the job has a reduce task.
         tmpUtilR = getExepctedUtility(ttstatus, job, false, env);
         expectedUtilR = tmpUtilR[0];
-        LOG.info("E.U. of Reduce tasks " + getJobName(job) + " = " + expectedUtilR);
+        LOG.debug("E.U. of Reduce tasks " + getJobName(job)
+                                          + " = " + expectedUtilR);
       }
 
       double expectedUtility = 0;
       boolean lChooseMap = true;
       // decide whether to allocate maps or reduces
-      if (lChooseMap = (expectedUtilM > expectedUtilR)) {
+      if (lChooseMap = (expectedUtilM >= expectedUtilR)) {
         // maps have more utility, choose maps
         expectedUtility = expectedUtilM;
         tmpUtilArray = tmpUtilM;
@@ -410,7 +458,7 @@ public class LearningScheduler extends TaskScheduler {
 
     // we do not have any jobs in the queue
     if (selectedJob == null) {
-      LOG.info("No jobs");
+      LOG.debug("No jobs");
       return null;
     }
 
@@ -422,7 +470,7 @@ public class LearningScheduler extends TaskScheduler {
     if (maxUtilArray[0] > MIN_EXPECTED_UTILITY) {
       allocateTask = true;
     } else if (maxUtilArray[0] < MIN_EXPECTED_UTILITY) {
-      LOG.info("##### None of the jobs have more than min utility");
+      LOG.debug("None of the jobs have more than min utility");
       // if the node is underloaded, assign a task anyway
       boolean veryLowLoad = env.underLoaded(PROCS_PER_CPU * UNDERLOAD_THRESHOLD);
       // check if the node is not in a 'false negative loop'
@@ -436,7 +484,7 @@ public class LearningScheduler extends TaskScheduler {
       allocateTask = (veryLowLoad || inFalseNegativeLoop) && (numTasks == 0);
 
       if (allocateTask) {
-        LOG.info("---->>>> Allocating task as node underloaded? " + veryLowLoad +
+        LOG.debug("Allocating task as node underloaded? " + veryLowLoad +
                 ", inFalseNegativeLoop? " + inFalseNegativeLoop);
       }
     }
@@ -444,7 +492,8 @@ public class LearningScheduler extends TaskScheduler {
     JobStatistics jobstat = null;
 
     if (allocateTask) {
-      task = chooseMap ? getNewMapTask(ttstatus, selectedJob) : getNewReduceTask(ttstatus, selectedJob);
+      task = chooseMap ? getNewMapTask(ttstatus, selectedJob) :
+                         getNewReduceTask(ttstatus, selectedJob);
       if (selectedJob != null) {
         jobstat = getJobStatistics(selectedJob, chooseMap);
       }
@@ -467,6 +516,7 @@ public class LearningScheduler extends TaskScheduler {
       assignments.get(selectedJob).incrementAndGet();      
       return chosenTasks;
     } else {
+      LOG.debug("Returning NULL");
       return null;
     }
   }
@@ -531,24 +581,35 @@ public class LearningScheduler extends TaskScheduler {
    */
   class FairAssignmentUtility implements UtilityFunction {
     Timer assignmentRefresher;
-    public FairAssignmentUtility() {
+    FairAssignmentUtility (){
       assignmentRefresher = new Timer("Job Assignment Refresher", true);
       TimerTask refresherTask = new TimerTask() {
         public void run() {
+          // get the max value of assignments
+          int maxAsgn = 0;
+          for(AtomicInteger asgn : assignments.values()) {
+            if(maxAsgn <= asgn.get())
+              maxAsgn = asgn.get();
+          }
           for(Map.Entry<JobInProgress, AtomicInteger> e : assignments.entrySet()) {
-            e.getValue().set(0);
+            e.getValue().addAndGet(-maxAsgn);
           }
         }
       };
-      assignmentRefresher.schedule(refresherTask, MRConstants.HEARTBEAT_INTERVAL_MIN,
-              MRConstants.HEARTBEAT_INTERVAL_MIN/2);
+      assignmentRefresher.schedule(refresherTask, 0, MRConstants.HEARTBEAT_INTERVAL_MIN);
     }
     
     public int getUtility(LearningScheduler sched, JobInProgress jip, boolean isMap) {
       int priority  = jip.getPriority().ordinal();
       AtomicInteger asgn = assignments.get(jip);
       if (asgn == null) return 0;
-      return (int)Math.pow(2, 64 - priority - asgn.get());
+      int util = (int) Math.pow(2, 64 - priority - asgn.get());
+      boolean mapsNeeded = jip.desiredMaps() > jip.finishedMaps();
+      if (isMap) {
+        return mapsNeeded ? util : 0;
+      } else {
+        return mapsNeeded ? 0 : util;
+      }
     }
   }
 
