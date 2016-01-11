@@ -1,0 +1,1 @@
+Scheduler that predicts outcome of a task allocation on TaskTrackers, and tries to allocate tasks that do not cause overload of TaskTracker resources.
